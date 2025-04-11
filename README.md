@@ -71,13 +71,13 @@ SELECT
 	rating
 from
 (
-		SELECT
-		type,
-		rating,
-		COUNT(*) as total_content,
-		rank() over(partition by type order by COUNT(*) desc) as ranks
-	From Netflix
-	group by 1,2
+SELECT
+	type,
+	rating,
+	COUNT(*) as total_content,
+	rank() over(partition by type order by COUNT(*) desc) as ranks
+From Netflix
+group by 1,2
 ) as t1
 WHERE ranks=1;
 ```
@@ -86,9 +86,11 @@ WHERE ranks=1;
 ### 3. List All Movies Released in a Specific Year (e.g., 2020)
 
 ```sql
-SELECT * 
-FROM netflix
-WHERE release_year = 2020;
+SELECT * from Netflix
+WHERE 
+   type = 'Movie'
+   AND
+   release_year = 2020;
 ```
 
 **Objective:** Retrieve all movies released in a specific year.
@@ -96,18 +98,13 @@ WHERE release_year = 2020;
 ### 4. Find the Top 5 Countries with the Most Content on Netflix
 
 ```sql
-SELECT * 
-FROM
-(
-    SELECT 
-        UNNEST(STRING_TO_ARRAY(country, ',')) AS country,
-        COUNT(*) AS total_content
-    FROM netflix
-    GROUP BY 1
-) AS t1
-WHERE country IS NOT NULL
-ORDER BY total_content DESC
-LIMIT 5;
+SELECT
+   UNNEST(STRING_TO_ARRAY(Country, ',')) as new_country,
+   COUNT(show_id) as total_content
+from Netflix
+Group by new_country 
+order by total_content desc
+limit 5;
 ```
 
 **Objective:** Identify the top 5 countries with the highest number of content items.
@@ -115,11 +112,11 @@ LIMIT 5;
 ### 5. Identify the Longest Movie
 
 ```sql
-SELECT 
-    *
-FROM netflix
-WHERE type = 'Movie'
-ORDER BY SPLIT_PART(duration, ' ', 1)::INT DESC;
+SELECT * FROM Netflix
+WHERE
+   type = 'Movie'
+   AND
+   duration = (SELECT max(duration) from netflix);
 ```
 
 **Objective:** Find the movie with the longest duration.
@@ -127,9 +124,11 @@ ORDER BY SPLIT_PART(duration, ' ', 1)::INT DESC;
 ### 6. Find Content Added in the Last 5 Years
 
 ```sql
-SELECT *
-FROM netflix
-WHERE TO_DATE(date_added, 'Month DD, YYYY') >= CURRENT_DATE - INTERVAL '5 years';
+SELECT
+	*
+FROM Netflix
+WHERE
+   TO_Date(date_added, 'Month DD,YYYY') >= CURRENT_DATE - Interval '5 years';
 ```
 
 **Objective:** Retrieve content added to Netflix in the last 5 years.
@@ -137,14 +136,10 @@ WHERE TO_DATE(date_added, 'Month DD, YYYY') >= CURRENT_DATE - INTERVAL '5 years'
 ### 7. Find All Movies/TV Shows by Director 'Rajiv Chilaka'
 
 ```sql
-SELECT *
-FROM (
-    SELECT 
-        *,
-        UNNEST(STRING_TO_ARRAY(director, ',')) AS director_name
-    FROM netflix
-) AS t
-WHERE director_name = 'Rajiv Chilaka';
+SELECT * 
+FROM netflix
+WHERE 
+  director ILIKE '%Rajiv Chilaka%';
 ```
 
 **Objective:** List all content directed by 'Rajiv Chilaka'.
@@ -152,10 +147,14 @@ WHERE director_name = 'Rajiv Chilaka';
 ### 8. List All TV Shows with More Than 5 Seasons
 
 ```sql
-SELECT *
-FROM netflix
-WHERE type = 'TV Show'
-  AND SPLIT_PART(duration, ' ', 1)::INT > 5;
+SELECT 
+*
+--SPLIT_PART(duration, ' ', 1) as seasons [SPLIT_PART(string, delimiter, position)]
+FROM Netflix
+WHERE
+   type = 'TV Show'
+   AND
+   SPLIT_PART(duration, ' ', 1)::numeric > 5;
 ```
 
 **Objective:** Identify TV shows with more than 5 seasons.
@@ -163,10 +162,10 @@ WHERE type = 'TV Show'
 ### 9. Count the Number of Content Items in Each Genre
 
 ```sql
-SELECT 
-    UNNEST(STRING_TO_ARRAY(listed_in, ',')) AS genre,
-    COUNT(*) AS total_content
-FROM netflix
+SELECT
+   UNNEST(STRING_TO_ARRAY(listed_in, ',')) as genre,
+   COUNT(show_id) as total_content
+FROM Netflix
 GROUP BY 1;
 ```
 
@@ -177,18 +176,16 @@ return top 5 year with highest avg content release!
 
 ```sql
 SELECT 
-    country,
-    release_year,
-    COUNT(show_id) AS total_release,
-    ROUND(
-        COUNT(show_id)::numeric /
-        (SELECT COUNT(show_id) FROM netflix WHERE country = 'India')::numeric * 100, 2
-    ) AS avg_release
+   country,
+   release_year,
+   COUNT(show_id) as total_release,
+   ROUND(COUNT(show_id)::numeric/(SELECT COUNT(show_id) FROM netflix WHERE country = 'India')::numeric * 100 ,2)
+   as avg_release
 FROM netflix
-WHERE country = 'India'
-GROUP BY country, release_year
-ORDER BY avg_release DESC
-LIMIT 5;
+WHERE country = 'India' 
+GROUP BY country, 2
+ORDER BY avg_release DESC 
+LIMIT 5
 ```
 
 **Objective:** Calculate and rank years by the average number of content releases by India.
@@ -196,9 +193,12 @@ LIMIT 5;
 ### 11. List All Movies that are Documentaries
 
 ```sql
-SELECT * 
-FROM netflix
-WHERE listed_in LIKE '%Documentaries';
+SELECT
+*
+FROM Netflix
+WHERE type ='Movie'
+      AND
+      listed_in like '%Documentaries%';
 ```
 
 **Objective:** Retrieve all movies classified as documentaries.
@@ -239,21 +239,26 @@ LIMIT 10;
 
 **Objective:** Identify the top 10 actors with the most appearances in Indian-produced movies.
 
-### 15. Categorize Content Based on the Presence of 'Kill' and 'Violence' Keywords
+### 15. Categorize the content based on the presence of the keywords 'kill' and 'violence' in the description field. Label content containing these keywords as 'Bad' and all other content as 'Good'. Count how many items fall into each category.
 
 ```sql
 SELECT 
     category,
+    type,
     COUNT(*) AS content_count
-FROM (
-    SELECT 
+FROM 
+(
+    SELECT *,
         CASE 
-            WHEN description ILIKE '%kill%' OR description ILIKE '%violence%' THEN 'Bad'
+            WHEN description ILIKE '%kill%' OR 
+                 description ILIKE '%violence%' THEN 'Bad'
             ELSE 'Good'
         END AS category
     FROM netflix
 ) AS categorized_content
-GROUP BY category;
+GROUP BY 1,2
+ORDER BY 2
+
 ```
 
 **Objective:** Categorize content as 'Bad' if it contains 'kill' or 'violence' and 'Good' otherwise. Count the number of items in each category.
@@ -268,19 +273,8 @@ GROUP BY category;
 This analysis provides a comprehensive view of Netflix's content and can help inform content strategy and decision-making.
 
 
+- **LinkedIn**: [Connect with me professionally]linkedin.com/in/anusha-tentu-393a6a233
 
-## Author - Zero Analyst
 
-This project is part of my portfolio, showcasing the SQL skills essential for data analyst roles. If you have any questions, feedback, or would like to collaborate, feel free to get in touch!
-
-### Stay Updated and Join the Community
-
-For more content on SQL, data analysis, and other data-related topics, make sure to follow me on social media and join our community:
-
-- **YouTube**: [Subscribe to my channel for tutorials and insights](https://www.youtube.com/@zero_analyst)
-- **Instagram**: [Follow me for daily tips and updates](https://www.instagram.com/zero_analyst/)
-- **LinkedIn**: [Connect with me professionally](https://www.linkedin.com/in/najirr)
-- **Discord**: [Join our community to learn and grow together](https://discord.gg/36h5f2Z5PK)
-
-Thank you for your support, and I look forward to connecting with you!
+Thank you!
 
